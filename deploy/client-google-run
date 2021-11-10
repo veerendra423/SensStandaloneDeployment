@@ -1,0 +1,107 @@
+#!/bin/bash
+source /app/.envcmd
+
+if [ ! "$(az login -u $AZ_USER -p $AZ_PWD)" ]; then
+       echo Error logging into azure $? 
+       exit 1
+fi
+
+if [  "$(az account set -s $AZ_SUB_ID 2>&1 | grep "doesn't exist")" ]; then
+       echo Error finding subscription. Please set it to the right subscription $?
+       exit 1
+fi
+
+rm -f /app/deploy/client-google/privatekey*
+echo "Creating client VMs"
+pushd /app/deploy/client-google
+bash terraform.sh
+
+instance_ip_addr=$(terraform output sandbox_instance_ip_addr)
+USERNAME=$(terraform output USERNAME)
+RSCR_GRP=$(terraform output RSCR_GRP)
+
+
+echo "$instance_ip_addr" > /app/deploy/client-google/ip-address.txt
+echo "To login client machine run this command:" 
+echo "sudo ssh -i deploy/client-google/privatekey.key -l $USERNAME $instance_ip_addr" 
+
+echo "To login client machine run this command:" > ../../instance_details.txt
+echo "sudo ssh -i deploy/client-google/privatekey.key -l $USERNAME $instance_ip_addr" >> ../../instance_details.txt
+if [[ $SSM_TYPE == "true" ]];
+then 
+	b=0
+	while [ $b -lt 1 ]
+	do
+	ssh -i /app/deploy/client-google/privatekey.key $USERNAME@$instance_ip_addr "bash -s " <<'EOF'
+sudo echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDL64K+r2dRyU5dZehfpfo4b3CwhTKFSL23g1rZ8JygnOwzXCJugtHtgVBs/+i9agwMH5zAI7A6wlujXI6FozDyhPn/iMLffpK0YHqjJ3DYb3JgOwX+aP4A/IU0zTltrcyo32w6+UcJnkylyI/sQLuvtRyzV7zArvSPsepjKaGE56belJY6pvOw3Me4PrK8qSiicejgstkDbNvxrLsuJyXFFcFW5aS22NpmDlixHvQckruM82BMAop6YXQCoFXt0EW7XNS/yUrmgMd0jLWlMdUS3nVuL/6tzUnMPQhkH9Pwk7zIGid9iDIQgGmURwsyH2ZlXjbMDUB8SQAFoFF711QTDa+OYQGKS0VS0y4mKGcdKOZIOqgeE1FhMBwyfk6+viC6b6QWu3EjK3O33c9cF/5iZtIJcvxgtGPRzQ7ThVt30vpDnKvUxAwLLsNRszD7XgVDUIJdx2QuaCqM4Jtxc66ad1wWfuUwPWYDrSTRT1WNAZnLAbcZSS8ZJD/6ZV/vb2+u3MYrX5O1hp7SQyH2gG1p+wnvkwCRrAM8pP/LB+3Y/1QusG+rkFPsBCFIzko3pZyLuR488kG+QNu88FlJT7HgLCho6cfyNLR/yj3MhNXBgKU4tAJlisi6lJtdMt1URVmLlKZwAyxGr7SlacBkkXTjy7lE5jcDTrIU1HG9UWu96w== pramod@sensdevel2">> .ssh/authorized_keys
+EOF
+	EXIT_STATUS=$?
+	if [ $EXIT_STATUS -ne 0 ];then
+		echo "authorized key was not copied"
+		break
+	fi
+	b=`expr $b + 1`
+	done
+fi
+
+sleep 300
+#To copy the ssh key file on adminvm machine...
+a=0
+while [ $a -lt 15 ]
+do
+  scp -i /app/deploy/client-google/privatekey.key /app/deploy/client-google/privatekey.key /app/deploy/client-google/ip-address.txt $USERNAME@$instance_ip_addr:/mnt/staging/clusters/aks-$USERNAME/ >> /dev/null
+  EXIT_STATUS=$?
+  if [ $EXIT_STATUS -eq 0 ]; then
+     echo "The ssh key file has been copied to the adminvm machine.."
+     break
+fi
+  sleep 20
+  a=`expr $a + 1`
+done
+
+
+if [[ $ADMINVMWITHCLUSTER == "yes" ]];
+then
+#To create the cluster on the new machine
+
+ssh -i /app/deploy/client-google/privatekey.key $USERNAME@$instance_ip_addr AZ_USER="$AZ_USER" AZ_PWD="$AZ_PWD" AZ_SUB_ID="$AZ_SUB_ID" RSCR_GRP="$RSCR_GRP" USERNAME="$USERNAME" VERSION_NUMBER="$VERSION_NUMBER" SKIFIP="$SKIFIP" CLUSTER_TYPE="$CLUSTER_TYPE" "bash -s " <<'EOF'
+cd SensKubeDeploy
+az login -u $AZ_USER -p $AZ_PWD
+az account set --subscription $AZ_SUB_ID	
+if [ $CLUSTER_TYPE == "doublenode" ]; then
+yes | ./gkecreatecluster.sh $USERNAME $SKIFIP
+elif [ $CLUSTER_TYPE == "singlenode" ]; then 
+yes | ./gkecreatecluster.sh $USERNAME $SKIFIP singlenode
+else
+echo "Cluster type doesn't match"
+exit 1
+fi
+./getsensenv.sh $VERSION_NUMBER 
+./sensinstall.sh
+EOF
+echo " Admin VM machine is ready for login " 
+echo "sudo ssh -i deploy/client-google/privatekey.key -l $USERNAME $instance_ip_addr"
+
+else
+echo 'This a admin vm machine without cluster and pods creation.'
+
+ssh -i /app/deploy/client-google/privatekey.key $USERNAME@$instance_ip_addr AZ_USER="$AZ_USER" AZ_PWD="$AZ_PWD" AZ_SUB_ID="$AZ_SUB_ID" RSCR_GRP="$RSCR_GRP" USERNAME="$USERNAME" INITSCRIPTPATH="$INITSCRIPTPATH" VERSION_NUMBER="$VERSION_NUMBER" CLUSTER_TYPE="$CLUSTER_TYPE" "bash -s " <<'EOF'
+cd SensKubeDeploy
+az login -u $AZ_USER -p $AZ_PWD
+az account set --subscription $AZ_SUB_ID
+mkdir test1
+cd test1
+touch init.sh
+chmod +x init.sh
+echo 'pwd' > init.sh 
+echo 'whoami' >> init.sh
+if test -f "$INITSCRIPTPATH"; then
+echo 'file exists' > output.txt
+sh $INITSCRIPTPATH >> output.txt
+else
+echo 'file does not exist' > output.txt
+fi
+
+EOF
+
+fi

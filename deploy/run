@@ -1,0 +1,144 @@
+#!/bin/bash
+
+source /app/.envcmd
+
+if [ ! "$(az login -u $AZ_USER -p $AZ_PWD)" ]; then
+       echo Error logging into azure $? 
+       exit 1
+fi
+
+if [  "$(az account set -s $AZ_SUB_ID 2>&1 | grep "doesn't exist")" ]; then
+       echo Error finding subscription. Please set it to the right subscription $?
+       exit 1
+fi
+
+rm -f /app/deploy/azure/privatekey*
+echo "Creating Azure VMs"
+pushd /app/deploy/azure
+bash terraform.sh $VERSION_NUMBER
+
+instance_ip_addr=$(terraform output instance_ip_addr)
+ver_name=$(terraform output product_output)
+USERNAME=$(terraform output USERNAME)
+
+#For Azure Sandbox machine.
+if [ $SENSORIANT_PLATFORM_PROVIDER == "AZURE" ];
+then
+   echo "This is azure sandbox"
+   rm -f /app/deploy/azure-sandbox/privatekey-sandbox*
+   echo "Creating Azure sandbox  VMs"
+   pushd /app/deploy/azure-sandbox
+   bash terraform.sh $instance_ip_addr $VERSION_NUMBER
+   instance_ip_sandbox=$(terraform output sandbox_instance_ip_addr)
+   
+sleep 100
+#To copy the sandbox key file on azzure machine...
+a=0
+while [ $a -lt 10 ]
+do
+  scp -i /app/deploy/azure/privatekey.key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null privatekey_sandbox.key $USERNAME@$instance_ip_addr:/opt/$ver_name/app/operator/credentials
+  EXIT_STATUS=$?
+  if [ $EXIT_STATUS -eq 0 ]; then
+     echo "The Sandbox private key has been copied to the azzure machine.."
+     break
+fi
+  sleep 10
+  a=`expr $a + 1`
+done
+
+sandbox_name=$(terraform output sandbox_machine_name)
+USERNAME=$(terraform output USERNAME)
+
+# To add the Sandbox Ip and Machine name on controller machine on /etc.hosts path.
+b=0
+while [ $b -lt 10 ]
+do
+ssh -i /app/deploy/azure/privatekey.key $USERNAME@$instance_ip_addr "bash -s $instance_ip_sandbox $sandbox_name" <<'EOF'
+ip_sandbox=$1
+name_sandbox=$2
+sudo chmod 777 /etc/hosts
+sudo echo $ip_sandbox $name_sandbox>> /etc/hosts
+sudo chmod 644 /etc/hosts
+EOF
+
+EXIT_STATUS=$?
+  if [ $EXIT_STATUS -eq 0 ]; then
+     echo "The Sandbox IP and name added to the azzure machine.."
+     break
+  fi  
+  sleep 10
+  b=`expr $b + 1`
+done
+
+#echo $instance_ip_sandbox $sandbox_name $machine_name
+echo "To login controller run this command:" 
+echo "sudo ssh -i deploy/azure/privatekey.key -l $USERNAME $instance_ip_addr" 
+echo "To login sandbox run this command:" 
+echo "sudo ssh -i deploy/azure-sandbox/privatekey_sandbox.key -l $USERNAME $instance_ip_sandbox" 
+echo "To login controller run this command:" > ../../instance_details.txt
+echo "sudo ssh -i deploy/azure/privatekey.key -l $USERNAME $instance_ip_addr" >> ../../instance_details.txt
+echo "To login sandbox run this command:" >> ../../instance_details.txt
+echo "sudo ssh -i deploy/azure-sandbox/privatekey_sandbox.key -l $USERNAME $instance_ip_sandbox" >> ../../instance_details.txt
+   
+   
+#For Google Sandbox machine....
+elif [ $SENSORIANT_PLATFORM_PROVIDER == "GOOGLE" ];
+then
+   echo "This is gcp sandbox"
+   rm -f /app/deploy/google/privatekey-sandbox*
+   echo "Creating google  VMs"
+   pushd /app/deploy/google
+   bash terraform_sandbox.sh $instance_ip_addr $VERSION_NUMBER
+   instance_ip_sandbox=$(terraform output instance_ip_sandbox)
+   USERNAME=$(terraform output USERNAME)
+   
+sleep 100
+#To copy the sandbox key file on azzure machine...
+a=0
+while [ $a -lt 10 ]
+do
+  scp -i /app/deploy/azure/privatekey.key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null privatekey_sandbox.key $USERNAME@$instance_ip_addr:/opt/$ver_name/app/operator/credentials
+  EXIT_STATUS=$?
+  if [ $EXIT_STATUS -eq 0 ]; then
+     echo "The Sandbox private key has been copied to the azzure machine.."
+     break
+fi
+  sleep 10
+  a=`expr $a + 1`
+done
+
+sandbox_name=$(terraform output sandbox_machine_name)
+USERNAME=$(terraform output USERNAME)
+# To add the Sandbox Ip and Machine name on controller machine on /etc.hosts path.
+b=0
+while [ $b -lt 10 ]
+do
+ssh -i /app/deploy/azure/privatekey.key $USERNAME@$instance_ip_addr "bash -s $instance_ip_sandbox $sandbox_name" <<'EOF'
+ip_sandbox=$1
+name_sandbox=$2
+sudo chmod 777 /etc/hosts
+sudo echo $ip_sandbox $name_sandbox>> /etc/hosts
+sudo chmod 644 /etc/hosts
+EOF
+
+EXIT_STATUS=$?
+  if [ $EXIT_STATUS -eq 0 ]; then
+     echo "The Sandbox IP and name added to the azzure machine.."
+     break
+  fi  
+  sleep 10
+  b=`expr $b + 1`
+done
+
+#echo $instance_ip_sandbox $sandbox_name $machine_name
+echo "To login controller run this command:" 
+echo "sudo ssh -i deploy/azure/privatekey.key -l $USERNAME $instance_ip_addr" 
+echo "To login sandbox run this command:" 
+echo "sudo ssh -i deploy/google/privatekey_sandbox.key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l $USERNAME $instance_ip_sandbox" 
+echo "To login controller run this command:" > ../../instance_details.txt
+echo "sudo ssh -i deploy/azure/privatekey.key -l $USERNAME $instance_ip_addr" >> ../../instance_details.txt
+echo "To login sandbox run this command:" >> ../../instance_details.txt
+echo "sudo ssh -i deploy/google/privatekey_sandbox.key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l $USERNAME $instance_ip_sandbox" >> ../../instance_details.txt
+else
+   echo "doesn't match...."
+fi

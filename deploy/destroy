@@ -1,0 +1,90 @@
+#!/bin/bash
+#Based on the Sandbox cloud provider The machines will destroy.
+source /app/.envcmd
+source /app/azure-credentials
+
+if [[ $MACHINE_TYPE == "adminvm" ]] && [[ $CLUSTER_PLATFORM_PROVIDER == "GOOGLE" ]] && [[ $SKIFIP == "" ]]; then
+
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying resources"
+pushd /app/deploy/azure
+terraform destroy -auto-approve -var "product_version=$VERSION_NUMBER"  -var "USERNAME=$USERNAME" 
+rm -f /app/deploy/azure/privatekey.key
+
+
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying azure-sandbox resources"
+pushd /app/deploy/client-google
+terraform destroy -auto-approve -var "AZURE_USER=$AZ_USER"  -var "AZURE_PWD=$AZ_PWD" -var "AZURE_SUB_ID=$AZ_SUB_ID" -var "product_version=$VERSION_NUMBER" -var "SENSOAUTH_AD_PRIMARY_DOMAIN=$SENSOAUTH_AD_PRIMARY_DOMAIN"  -var "SENSOAUTH_CLIENT_ID=$SENSOAUTH_CLIENT_ID" -var "SENSOAUTH_CLIENT_SECRET=$SENSOAUTH_CLIENT_SECRET" -var "SENSOAUTH_TENANT_ID=$SENSOAUTH_TENANT_ID" -var "SAFECTL_ROOT_AUTHORITY=$SAFECTL_ROOT_AUTHORITY" -var "SAFECTL_ROOT_CLIENT_ID=$SAFECTL_ROOT_CLIENT_ID" -var "SAFECTL_ROOT_USERNAME=$SAFECTL_ROOT_USERNAME" -var "SAFECTL_ROOT_PASSWORD=$SAFECTL_ROOT_PASSWORD" -var "SUBDOMAIN=$SUBDOMAIN" -var "controller_azurerm_resource_group=$ADMINVM_RESOURCE_GROUP" -var "SAFECTL_VERSION=$SAFECTL_VERSION" -var "SENSKUBEDEPLOY_VERSION=$SENSKUBEDEPLOY_VERSION"
+
+
+
+rm -f /app/deploy/client-google/privatekey.key
+#sed -i 's/'"$MACHINE_TYPE"'/REPLACE_WITH_MACHINE_TYPE/g' /app/.envcmd
+
+elif [[ $MACHINE_TYPE == "adminvm" ]] && [[ $CLUSTER_PLATFORM_PROVIDER == "GOOGLE" ]]; then
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying resources"
+pushd /app/deploy/client-google
+terraform destroy -auto-approve -var "AZURE_USER=$AZ_USER"  -var "AZURE_PWD=$AZ_PWD" -var "AZURE_SUB_ID=$AZ_SUB_ID" -var "product_version=$VERSION_NUMBER" -var "SENSOAUTH_AD_PRIMARY_DOMAIN=$SENSOAUTH_AD_PRIMARY_DOMAIN"  -var "SENSOAUTH_CLIENT_ID=$SENSOAUTH_CLIENT_ID" -var "SENSOAUTH_CLIENT_SECRET=$SENSOAUTH_CLIENT_SECRET" -var "SENSOAUTH_TENANT_ID=$SENSOAUTH_TENANT_ID" -var "SAFECTL_ROOT_AUTHORITY=$SAFECTL_ROOT_AUTHORITY" -var "SAFECTL_ROOT_CLIENT_ID=$SAFECTL_ROOT_CLIENT_ID" -var "SAFECTL_ROOT_USERNAME=$SAFECTL_ROOT_USERNAME" -var "SAFECTL_ROOT_PASSWORD=$SAFECTL_ROOT_PASSWORD" -var "SUBDOMAIN=$SUBDOMAIN" -var "controller_azurerm_resource_group=$ADMINVM_RESOURCE_GROUP" -var "SAFECTL_VERSION=$SAFECTL_VERSION" -var "SENSKUBEDEPLOY_VERSION=$SENSKUBEDEPLOY_VERSION"
+rm -f /app/deploy/client/privatekey.key
+#sed -i 's/'"$MACHINE_TYPE"'/REPLACE_WITH_MACHINE_TYPE/g' /app/.envcmd
+
+elif [[ $MACHINE_TYPE == "adminvm" ]] && [[ $CLUSTER_PLATFORM_PROVIDER == "AZURE" ]]; then
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying resources"
+pushd /app/deploy/client
+terraform destroy -auto-approve -var "AZURE_USER=$AZ_USER"  -var "AZURE_PWD=$AZ_PWD" -var "AZURE_SUB_ID=$AZ_SUB_ID" -var "product_version=$VERSION_NUMBER" -var "SENSOAUTH_AD_PRIMARY_DOMAIN=$SENSOAUTH_AD_PRIMARY_DOMAIN"  -var "SENSOAUTH_CLIENT_ID=$SENSOAUTH_CLIENT_ID" -var "SENSOAUTH_CLIENT_SECRET=$SENSOAUTH_CLIENT_SECRET" -var "SENSOAUTH_TENANT_ID=$SENSOAUTH_TENANT_ID" -var "SAFECTL_ROOT_AUTHORITY=$SAFECTL_ROOT_AUTHORITY" -var "SAFECTL_ROOT_CLIENT_ID=$SAFECTL_ROOT_CLIENT_ID" -var "SAFECTL_ROOT_USERNAME=$SAFECTL_ROOT_USERNAME" -var "SAFECTL_ROOT_PASSWORD=$SAFECTL_ROOT_PASSWORD" -var "SUBDOMAIN=$SUBDOMAIN" -var "controller_azurerm_resource_group=$ADMINVM_RESOURCE_GROUP" -var "SAFECTL_VERSION=$SAFECTL_VERSION" -var "SENSKUBEDEPLOY_VERSION=$SENSKUBEDEPLOY_VERSION"
+rm -f /app/deploy/client/privatekey.key
+#sed -i 's/'"$MACHINE_TYPE"'/REPLACE_WITH_MACHINE_TYPE/g' /app/.envcmd
+
+else
+if [ $SENSORIANT_PLATFORM_PROVIDER == "AZURE" ];
+then
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying resources"
+pushd /app/deploy/azure
+terraform destroy -auto-approve -var "product_version=$VERSION_NUMBER"  -var "USERNAME=$USERNAME"
+rm -f /app/deploy/azure/privatekey.key
+
+
+az login -u $AZ_USER -p $AZ_PWD 
+az account set -s $AZ_SUB_ID
+echo "Destroying azure-sandbox resources"
+pushd /app/deploy/azure-sandbox
+terraform destroy -auto-approve -var "product_version=$VERSION_NUMBER"  -var "USERNAME=$USERNAME"
+rm -f /app/deploy/azure-sandbox/privatekey_sandbox.key
+sed -i 's/'"$SENSORIANT_PLATFORM_PROVIDER"'/REPLACE_WITH_PLATFORM_PROVIDER/g' /app/.envcmd
+sed -i 's/'"$TEE_TYPE"'/REPLACE_WITH_TEE_TYPE/g' /app/.envcmd
+sed -i 's/'"$ALGORITHM_MODE"'/REPLACE_WITH_ALGORITHM_MODE/g' /app/.envcmd
+sed -i 's/'"$VERSION_NUMBER"'/REPLACE_WITH_VERSION_NUMBER/g' /app/.envcmd
+sed -i 's/'"$USERNAME"'/REPLACE_WITH_USERNAME/g' /app/.envcmd
+
+elif [ $SENSORIANT_PLATFORM_PROVIDER == "GOOGLE" ];
+then
+
+az login -u $AZ_USER -p $AZ_PWD
+az account set -s $AZ_SUB_ID
+echo "Destroying resources"
+pushd /app/deploy/azure
+terraform destroy -auto-approve -var "product_version=$VERSION_NUMBER" -var "USERNAME=$USERNAME"
+rm -f /app/deploy/azure/privatekey.key
+
+echo "Destroying sandbox resources"
+pushd /app/deploy/google
+terraform destroy -auto-approve -var "product_version=$VERSION_NUMBER" -var "USERNAME=$USERNAME"
+rm -f /app/deploy/google/privatekey-sandbox.key
+sed -i 's/'"$SENSORIANT_PLATFORM_PROVIDER"'/REPLACE_WITH_PLATFORM_PROVIDER/g' /app/.envcmd
+sed -i 's/'"$TEE_TYPE"'/REPLACE_WITH_TEE_TYPE/g' /app/.envcmd
+sed -i 's/'"$ALGORITHM_MODE"'/REPLACE_WITH_ALGORITHM_MODE/g' /app/.envcmd
+sed -i 's/'"$VERSION_NUMBER"'/REPLACE_WITH_VERSION_NUMBER/g' /app/.envcmd
+sed -i 's/'"$USERNAME"'/REPLACE_WITH_USERNAME/g' /app/.envcmd
+else
+   echo "doesn't match...."
+fi
+fi
